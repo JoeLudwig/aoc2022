@@ -10,19 +10,43 @@ fn parse_point( s: &str ) -> ( usize, usize )
 	);
 }
 
+fn draw_grid( grid: &Vec< char >, width: usize, left: usize, right: usize, bottom: usize )
+{
+	let height = grid.len() / width;
+	for y in 0..( bottom + 1 )
+	{
+		let mut line = String::new();
+		for x in left..( right + 1 )
+		{
+			line.push( grid[ x + y * width ] );
+		}
+		println!( "{}", line );
+	}
+
+	println!( "" );
+}
+
 fn main()
 {
 	let mut lines = io::stdin().lock().lines();
 
-	let mut grid: Vec< bool > = Vec::new();
+	let mut grid: Vec< char > = Vec::new();
 	let width = 600;
 	let height = 500;
 	
-	grid.resize( width * height, false );
+	grid.resize( width * height, '.' );
+
+	let mut left = 500;
+	let mut right = 500;
+	let mut bottom = 1;
 
 	let ind = | x: usize, y: usize | -> usize { x + y * width };
-	let full = | x: usize, y: usize | -> bool { grid[ ind( x, y ) ] };
-	let mut block = | x: usize, y: usize |   { grid[ ind( x, y ) ] = true; };
+	let blocked = | grid: &Vec< char >, x: usize, y: usize | -> bool { grid[ ind( x, y ) ] != '.' };
+	let block = | grid: &mut Vec< char >, x: usize, y: usize, c: char |   
+	{ 
+		grid[ ind( x, y ) ] = c; 
+	};
+
 
 	while let Some( line ) = lines.next()
 	{
@@ -37,12 +61,15 @@ fn main()
 			if cur_x == prev_x
 			{
 				// vertical line
-				let top = cmp::min( cur_y, prev_y );
-				let bottom = cmp::max( cur_y, prev_y );
+				let top_end = cmp::min( cur_y, prev_y );
+				let bottom_end = cmp::max( cur_y, prev_y );
 
-				for y in top..bottom
+				for y in top_end..( bottom_end + 1 )
 				{
-					block( cur_x, y );
+					block( &mut grid, cur_x, y, '|' );
+					left = cmp::min( left, cur_x );
+					right = cmp::max( right, cur_x );
+					bottom = cmp::max( bottom, y );
 				}
 			}
 			else
@@ -50,20 +77,70 @@ fn main()
 				// horizontal line
 				assert!( cur_y == prev_y );
 
-				let left = cmp::min( cur_x, prev_x );
-				let right = cmp::max( cur_x, prev_x );
+				let left_end = cmp::min( cur_x, prev_x );
+				let right_end = cmp::max( cur_x, prev_x );
 
-				for x in left..right
+				for x in left_end..( right_end + 1 )
 				{
-					block( x, cur_y );
+					block( &mut grid, x, cur_y, '-' );
+					left = cmp::min( left, x );
+					right = cmp::max( right, x );
+					bottom = cmp::max( bottom, cur_y );
 				}
 			}
 					
 			prev_x = cur_x;
 			prev_y = cur_y;
 		}		
-		
-
 	}
 
+	{
+		left -= 1;
+		right += 1;
+		bottom += 1;
+	}
+
+	draw_grid( &grid, width, left, right, bottom );
+
+	let mut sand_drops = 0;
+	let mut hit_bottom = false;
+	while !hit_bottom
+	{
+		let mut x = 500;
+		let mut y = 0;
+		
+		while y <= bottom
+		{
+			let down_clear: bool = { !blocked( &grid, x, y + 1 ) };
+			let left_down_clear: bool = { !blocked( &grid, x - 1, y + 1 ) };
+			let right_down_clear: bool = { !blocked( &grid, x + 1, y + 1 ) };
+			if down_clear
+			{
+				y += 1;
+			}
+			else if left_down_clear
+			{
+				x -= 1;
+				y += 1;
+			}
+			else if right_down_clear
+			{
+				x += 1;
+				y += 1;
+			}
+			else 
+			{
+				block( &mut grid, x, y, 'o' );
+				sand_drops += 1;
+				break;
+			}
+		}
+
+		//draw_grid( &grid, width, left, right, bottom );
+		hit_bottom = y >= bottom;
+	}
+
+	draw_grid( &grid, width, left, right, bottom );
+
+	println!( "Sand drops: {}", sand_drops );
 }
