@@ -31,7 +31,7 @@ fn main()
 	let mut lines = io::stdin().lock().lines();
 
 	let mut grid: Vec< char > = Vec::new();
-	let width = 600;
+	let width = 1000;
 	let height = 500;
 	
 	grid.resize( width * height, '.' );
@@ -95,16 +95,20 @@ fn main()
 	}
 
 	{
-		left -= 1;
-		right += 1;
-		bottom += 1;
+		left -= 5;
+		right += 5;
+		bottom += 2;
 	}
 
+	for x in 0..width
+	{
+		block( &mut grid, x, bottom, '=' );
+	}
 	draw_grid( &grid, width, left, right, bottom );
 
 	let mut sand_drops = 0;
-	let mut hit_bottom = false;
-	while !hit_bottom
+	let mut filled = false;
+	while !filled
 	{
 		let mut x = 500;
 		let mut y = 0;
@@ -136,8 +140,11 @@ fn main()
 			}
 		}
 
-		//draw_grid( &grid, width, left, right, bottom );
-		hit_bottom = y >= bottom;
+		if sand_drops % 100  == 0
+		{
+			draw_grid( &grid, width, left, right, bottom );
+		}
+		filled = x == 500 && y == 0;
 	}
 
 	draw_grid( &grid, width, left, right, bottom );
