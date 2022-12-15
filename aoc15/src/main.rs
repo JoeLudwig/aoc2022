@@ -1,32 +1,25 @@
 use std::io::{ self, BufRead };
 
-use std::env;
-
 #[derive(Eq,PartialEq,Clone,Hash,Debug)]
 struct Sensor
 {
-	sx: i32,
-	sy: i32,
-	bx: i32,
-	by: i32,
+	sx: i64,
+	sy: i64,
+	bx: i64,
+	by: i64,
 }
 
-#[derive(Eq,PartialEq,Clone,Hash,Debug)]
-struct Range
-{
-	s: i32,
-	e: i32,
-}
+type Range = ( i64, i64 );
+type RangeVec = Vec< Range >;
 
-
-fn sensor_covers( sensor: &Sensor, y: i32 ) -> Option< ( i32, i32 ) >
+fn sensor_covers( sensor: &Sensor, y: i64 ) -> Option< Range >
 {
 	let range = ( sensor.bx - sensor.sx ).abs() + ( sensor.by - sensor.sy ).abs();
 
 	let dist = ( sensor.sy - y ).abs();
 
 	let dx = range - dist;
-	println!( " {:?} {} {} {}", sensor, range, dist, dx );
+	//println!( " {:?} {} {} {}", sensor, range, dist, dx );
 	if dx < 0
 	{
 		return Option::None;
@@ -36,62 +29,19 @@ fn sensor_covers( sensor: &Sensor, y: i32 ) -> Option< ( i32, i32 ) >
 }
 
 
-fn main()
+fn merge_ranges( ranges: &RangeVec ) -> RangeVec
 {
-    let args: Vec<String> = env::args().collect();
-	if args.len() != 2 
+	let mut merged_ranges: RangeVec = Vec::new();
+	if ranges.len() < 2
 	{
-		println!( "Invalid args. Need a Y value");
-		return;
-	}	
-
-	let mut lines = io::stdin().lock().lines();
-
-	let mut sensors: Vec<Sensor> = Vec::new();
-
-	while let Some( line ) = lines.next()
-	{
-		let cur_line = line.unwrap();
-
-		let trimmed = cur_line.replace( "Sensor at x=", "" );
-		let trimmed = trimmed.replace( ", y=", "," );
-		let trimmed = trimmed.replace( ": closest beacon is at x=", "," );
-		let trimmed = trimmed.replace( ", y=", "," );
-
-		let coord: Vec<&str> = trimmed.split( "," ).collect();
-		sensors.push( Sensor
-			{
-				sx: coord[0].parse::<i32>().unwrap(),
-				sy: coord[1].parse::<i32>().unwrap(),
-				bx: coord[2].parse::<i32>().unwrap(),
-				by: coord[3].parse::<i32>().unwrap(),
-			} );
+		return merged_ranges;
 	}
 
-	println!( "Sensors: {:?}", sensors );
-
-	let y = args[1].parse::<i32>().unwrap();
-
-	let mut ranges: Vec< ( i32, i32 ) > = Vec::new();
-	for sensor in sensors
-	{
-		match sensor_covers( &sensor, y )
-		{
-			Some( r ) => ranges.push( r ),
-			None => {}
-		}
-	}
-
-	ranges.sort();
-	println!( "Ranges: {:?}", ranges );
-
-	let mut total_area = 0;
 	let mut cur_range = ranges[0].clone();
 	for i in 1..ranges.len()
 	{
 		let r = ranges[i];
 
-		println!( " {:?} <= {:?} (total area {} )", cur_range, r, total_area );
 		if ( r.0 - cur_range.1 ) <= 1
 		{
 			if r.1 <= cur_range.1
@@ -113,14 +63,76 @@ fn main()
 			// no overlap, push cur range, and make cur_range=r
 			// cur_range: +---------+
 			//         r:             +---+
-		 	total_area += cur_range.1 - cur_range.0;
-
-			cur_range = r;
+			merged_ranges.push( cur_range );
+			cur_range = r.clone();
 		}
 	}
-	println!( " {:?}", cur_range );
-	total_area += cur_range.1 - cur_range.0 ;
 
-	println!( "Total area: {}", total_area );
+	merged_ranges.push( cur_range.clone() );
+	return merged_ranges;
+}
+
+fn main()
+{
+	let mut lines = io::stdin().lock().lines();
+
+	let mut sensors: Vec<Sensor> = Vec::new();
+
+	while let Some( line ) = lines.next()
+	{
+		let cur_line = line.unwrap();
+
+		let trimmed = cur_line.replace( "Sensor at x=", "" );
+		let trimmed = trimmed.replace( ", y=", "," );
+		let trimmed = trimmed.replace( ": closest beacon is at x=", "," );
+		let trimmed = trimmed.replace( ", y=", "," );
+
+		let coord: Vec<&str> = trimmed.split( "," ).collect();
+		sensors.push( Sensor
+			{
+				sx: coord[0].parse::<i64>().unwrap(),
+				sy: coord[1].parse::<i64>().unwrap(),
+				bx: coord[2].parse::<i64>().unwrap(),
+				by: coord[3].parse::<i64>().unwrap(),
+			} );
+	}
+
+	//println!( "Sensors: {:?}", sensors );
+
+	let mut found_it = false;
+	for y in 0..4000001
+	{
+		let mut ranges: RangeVec = Vec::new();
+		for sensor in &sensors
+		{
+			match sensor_covers( &sensor, y )
+			{
+				Some( r ) => ranges.push( r ),
+				None => {}
+			}
+		}
+
+		ranges.sort();
+
+		let ranges = merge_ranges( &ranges );
+		//println!( "{} : {:?}", y, ranges );
+
+		if ranges.len() != 2
+		{
+			continue;
+		}
+
+		if ranges[0].1 + 2 != ranges[1].0
+		{
+			continue;
+		}
+
+		assert!( !found_it );
+
+		println!( "{:?}", ranges );
+		let x = ranges[0].1 + 1;
+		println!( "frequency: {}", 4000000 * x + y ); 
+	}
+
 }
 
