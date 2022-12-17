@@ -1,21 +1,52 @@
 use std::io::{ self, BufRead };
 use std::collections::HashMap;
-//use std::collections::HashSet;
+use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::fmt;
+use std::cmp;
 
 
 
-type TunnelMap = HashMap<String, i32>;
+type TunnelMap = HashMap<i32, i32>;
+
 
 #[derive(Eq,PartialEq,Clone,Debug)]
 struct Valve
 {
-	name: String,
+	id: i32,
 	flow_rate: i32,
 	exits: TunnelMap,
 }
 
-type ValveMap = HashMap<String, Valve>;
+type ValveMap = HashMap<i32, Valve>;
+
+fn name_to_id( name: &str ) -> i32
+{
+	assert!( name.len() == 2 );
+	let mut id: i32 = 0;
+	for c in name.chars()
+	{
+		id *= 100;
+		id += ( c as i32 - 'A' as i32 ) + 1;
+	}
+	return id;
+}
+
+const AA_ID: i32 = 101;
+
+fn id_to_name( id: i32 ) -> String
+{
+	let mut id = id;
+	let mut out: String = String::new();
+	while id != 0
+	{
+		let c = ( id % 100 - 1 ) + 'A' as i32;
+		out.insert( 0, c as u8 as char);
+
+		id /= 100;
+	}
+	return out;
+}
 
 impl Valve
 {
@@ -32,12 +63,12 @@ impl Valve
 		let mut exits: TunnelMap = TunnelMap::new();
 		for exit in &args[ 1..args.len() ]
 		{
-			exits.insert( exit.to_string(), 1 );
+			exits.insert( name_to_id( exit ), 1 );
 		}
 
 		return Valve 
 		{
-			name: name.to_string(),
+			id: name_to_id( name ),
 			flow_rate: flow_rate,
 			exits: exits,
 		}
@@ -52,13 +83,13 @@ impl fmt::Display for Valve
 		let mut dests: Vec<String> = Vec::new();
 		for k in self.exits.keys()
 		{
-			dests.push( k.to_string() );
+			dests.push( id_to_name( *k ) );
 		}
 		dests.sort();
 
 		for d in dests
 		{
-			let c = self.exits.get( &d ).unwrap();
+			let c = self.exits.get( &name_to_id( &d ) ).unwrap();
 			if s.len() > 0
 			{
 				s.push_str( "   " );
@@ -67,7 +98,7 @@ impl fmt::Display for Valve
 			s.push_str( &format!( "{} {:2}", d, c ) );
 		}
 
-		f.write_fmt( format_args!( "V {} {:2}   {}", self.name, self.flow_rate, s ) )
+		f.write_fmt( format_args!( "V {} {:2}   {}", id_to_name( self.id ), self.flow_rate, s ) )
 	}
 }
 
@@ -76,13 +107,13 @@ fn dump_valves( valves: &ValveMap )
 	let mut valve_names: Vec<String> = Vec::new();
 	for k in valves.keys()
 	{
-		valve_names.push( k.to_string() );
+		valve_names.push( id_to_name( *k ) );
 	}
 	valve_names.sort();
 	
 	for name in valve_names
 	{
-		println!( " {}", valves.get( &name ).unwrap() );
+		println!( " {}", valves.get( &name_to_id( &name ) ).unwrap() );
 	}
 	println!("");
 }
@@ -91,7 +122,7 @@ fn add_secondary_links( valves: &ValveMap ) -> ( bool, ValveMap )
 {
 	let mut collapsed_any = false;
 	let mut out: ValveMap = ValveMap::new();
-	for ( name, valve ) in valves.iter() 
+	for ( id, valve ) in valves.iter() 
 	{
 		// don't even bother with zero flow rate valves. They won't survive the first pass
 		// except our start point. Should probably keep that
@@ -105,7 +136,7 @@ fn add_secondary_links( valves: &ValveMap ) -> ( bool, ValveMap )
 		for (d, c) in &valve.exits
 		{
 			// keep the link to the valve itself
-			new_exits.insert( d.to_string(), c.clone() );
+			new_exits.insert( *d, c.clone() );
 		}
 
 		for (d, c) in &valve.exits
@@ -114,7 +145,7 @@ fn add_secondary_links( valves: &ValveMap ) -> ( bool, ValveMap )
 			for (d2, c2 ) in &dest.exits
 			{
 				// don't bother looping pack to our start node
-				if d2 == name
+				if d2 == id
 				{
 					continue;
 				}
@@ -136,7 +167,7 @@ fn add_secondary_links( valves: &ValveMap ) -> ( bool, ValveMap )
 					{
 						collapsed_any = true;
 						//println!( "  inserting new tunnel");
-						new_exits.insert( d2.clone(), cost );
+						new_exits.insert( *d2, cost );
 					},
 				}
 			}
@@ -144,24 +175,90 @@ fn add_secondary_links( valves: &ValveMap ) -> ( bool, ValveMap )
 
 		let mut updated_valve = valve.clone();
 		updated_valve.exits = new_exits;
-		out.insert( name.clone(), updated_valve );
+		out.insert( *id, updated_valve );
 	}
 	return ( collapsed_any, out );
 }
 
-fn run_flow( path: &Vec<String>, valves: &ValveMap ) -> i32
+#[derive(Eq,PartialEq,Clone,Debug)]
+struct Path
+{
+	so_far: String,
+	curr : i32,
+	remaining: Vec<i32>,
+	flow_rate: i32,
+	total_flow: i32,
+	rounds_left: i32,
+}
+
+impl Path
+{
+	fn children( &self, valves: &ValveMap ) -> Option< Vec< Path > >
+	{
+		if self.remaining.len() == 0
+		{
+			return Option::None;
+		}
+
+		
+		let mut children: Vec< Path > = Vec::new();
+		for i in 0..self.remaining.len()
+		{
+			let next = self.remaining[i];
+			let from = valves.get( &self.curr ).unwrap();
+
+			let cost = from.exits.get( &next ).unwrap() + 1;
+			
+			if cost > self.rounds_left
+			{
+				// this one isn't an option because it would push us over 30 rounds
+				continue;
+			}
+			let dest = valves.get( &next ).unwrap();
+
+			let mut new_child = Path
+			{
+				so_far: self.so_far.clone(),
+				curr: next,
+				remaining: self.remaining.clone(),
+				flow_rate: self.flow_rate + dest.flow_rate,
+				total_flow: self.total_flow + self.flow_rate * cost,
+				rounds_left: self.rounds_left - cost,
+			};
+			new_child.so_far.push_str( &id_to_name( next ) );
+			new_child.remaining.remove( i );
+
+			children.push( new_child );
+		}
+
+		if children.len() > 0 
+		{
+			return Option::Some( children );
+		}
+		else
+		{
+			return Option::None;
+		}
+	}
+}
+
+
+fn run_flow( path: &Vec<i32>, valves: &ValveMap ) -> i32
 {
 	let mut total_flowed = 0;
 	let mut flow_rate: i32 = 0;
 	let mut rounds_left: i32 = 30;
-	for i in 1..path.len()
+	for i in 0..path.len()
 	{
-		let old_loc = valves.get( &path[ i-1 ] ).unwrap();
+		let old_loc = valves.get( if i == 0 { &AA_ID } else { &path[ i-1 ] } ).unwrap();
 		let loc = valves.get( &path[ i ] ).unwrap();
 
-		let cost = old_loc.exits.get( &loc.name ).unwrap();
+		let cost = old_loc.exits.get( &loc.id ).unwrap();
 		
-		assert!( cost + 1 < rounds_left );
+		if cost + 1 >= rounds_left
+		{
+			break;
+		}
 		
 		total_flowed += flow_rate * ( cost + 1 );
 		rounds_left -= cost + 1;
@@ -171,6 +268,7 @@ fn run_flow( path: &Vec<String>, valves: &ValveMap ) -> i32
 	total_flowed += flow_rate * rounds_left;
 	return total_flowed;
 }
+
 
 fn main()
 {
@@ -184,7 +282,7 @@ fn main()
 		let cur_line = line.unwrap();
 
 		let valve = Valve::parse( &cur_line );
-		valves.insert( valve.name.clone(), valve );
+		valves.insert( valve.id, valve );
 	}
 
 	dump_valves( &valves );
@@ -199,42 +297,76 @@ fn main()
 		else
 		{
 			valves = new_valves;
-			dump_valves( &valves );
+			//dump_valves( &valves );
 		}
 	}
 
-	let mut good_valves: Vec<String> = Vec::new();
-	for ( name, valve ) in &valves
+	dump_valves( &valves );
+
+	let mut good_valves: Vec<i32> = Vec::new();
+	for ( _, valve ) in &valves
 	{
 		if valve.flow_rate > 0
 		{
-			good_valves.push( name.clone() );
+			good_valves.push( valve.id );
 		}
 	}
+
 
 	//let path: Vec<String> = [ "AA", "FJ", "QN", "PY", "AW", "FY", "UV" ].map(String::from).to_vec();
-	let path: Vec<String> = [ "AA", "DD", "BB", "JJ", "HH", "EE", "CC" ].map(String::from).to_vec();
+	//let path: Vec<String> = [ "AA", "DD", "BB", "JJ", "HH", "EE", "CC" ].map(String::from).to_vec();
 
-/*
-	let mut path: Vec<String> = vec![ "AA".to_string() ];
-	for i in 0..good_valves.len()
+	let mut visited: HashSet<String> = HashSet::new();
+	
+	let mut todo: VecDeque< Path > = VecDeque::new();
+
+	todo.push_back( Path
+	{ 
+		so_far: "AA".to_string(), 
+		remaining: good_valves.clone(),
+		curr: AA_ID,
+		total_flow: 0,
+		flow_rate: 0,
+		rounds_left: 30,
+	} );
+
+	let mut max_flow = 0;
+	let mut n = 0;
+	let mut calcs = 0;
+	while let Some( path ) = todo.pop_back()
 	{
-		path.push( good_valves[ i ] );
-
-		for j in 0.good_valves.len()
+		match path.children( &valves )
 		{
-			if i != j 
+			None =>
 			{
-				path.push( good_valves[j] );
-			}
+				// should be a real path. Calculate it
+				let total_flow = path.total_flow + path.flow_rate * path.rounds_left;
+				//println!( "calculating {} {}", total_flow, path.to_string() );
+
+				max_flow = cmp::max( total_flow, max_flow );
+				calcs += 1;
+			},
+			Some( children ) =>
+			{
+				for child in children
+				{
+					if !visited.contains( &child.so_far )
+					{
+						visited.insert( child.so_far.clone() );
+						todo.push_back( child );
+					}
+				}
+			},
 		}
-				
-		
+
+		n += 1;
+		if ( n % 100000 ) == 0
+		{
+			println!( "TODO: {:?}  max_flow: {}    calcs: {}", todo.len(), max_flow, calcs );
+		}
 	}
-	*/
 
-	let total_flow = run_flow( &path, &valves );
-	println!( "total_flow: {}", total_flow );
 
+	println!( "Max flow: {}", max_flow );
 }
 
