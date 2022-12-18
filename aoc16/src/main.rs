@@ -270,6 +270,61 @@ fn run_flow( path: &Vec<i32>, valves: &ValveMap ) -> i32
 }
 
 
+fn best_flow_for_valves( good_valves: &Vec<i32>, valves: &ValveMap ) -> i32
+{
+	let mut visited: HashSet<String> = HashSet::new();
+	
+	let mut todo: VecDeque< Path > = VecDeque::new();
+
+	todo.push_back( Path
+	{ 
+		so_far: "AA".to_string(), 
+		remaining: good_valves.clone(),
+		curr: AA_ID,
+		total_flow: 0,
+		flow_rate: 0,
+		rounds_left: 26,
+	} );
+
+	let mut max_flow = 0;
+	let mut n = 0;
+	let mut calcs = 0;
+	while let Some( path ) = todo.pop_back()
+	{
+		match path.children( &valves )
+		{
+			None =>
+			{
+				// should be a real path. Calculate it
+				let total_flow = path.total_flow + path.flow_rate * path.rounds_left;
+				//println!( "calculating {} {}", total_flow, path.to_string() );
+
+				max_flow = cmp::max( total_flow, max_flow );
+				calcs += 1;
+			},
+			Some( children ) =>
+			{
+				for child in children
+				{
+					if !visited.contains( &child.so_far )
+					{
+						visited.insert( child.so_far.clone() );
+						todo.push_back( child );
+					}
+				}
+			},
+		}
+
+//		n += 1;
+//		if ( n % 100000 ) == 0
+//		{
+//			println!( "TODO: {:?}  max_flow: {}    calcs: {}", todo.len(), max_flow, calcs );
+//		}
+	}
+
+	return max_flow;
+}
+
 fn main()
 {
 	let mut lines = io::stdin().lock().lines();
@@ -313,59 +368,37 @@ fn main()
 	}
 
 
-	//let path: Vec<String> = [ "AA", "FJ", "QN", "PY", "AW", "FY", "UV" ].map(String::from).to_vec();
-	//let path: Vec<String> = [ "AA", "DD", "BB", "JJ", "HH", "EE", "CC" ].map(String::from).to_vec();
-
-	let mut visited: HashSet<String> = HashSet::new();
-	
-	let mut todo: VecDeque< Path > = VecDeque::new();
-
-	todo.push_back( Path
-	{ 
-		so_far: "AA".to_string(), 
-		remaining: good_valves.clone(),
-		curr: AA_ID,
-		total_flow: 0,
-		flow_rate: 0,
-		rounds_left: 30,
-	} );
-
 	let mut max_flow = 0;
-	let mut n = 0;
-	let mut calcs = 0;
-	while let Some( path ) = todo.pop_back()
+	let combo_count = (2 as u32 ).pow( good_valves.len() as u32 );
+	for mask in 0..combo_count
 	{
-		match path.children( &valves )
-		{
-			None =>
-			{
-				// should be a real path. Calculate it
-				let total_flow = path.total_flow + path.flow_rate * path.rounds_left;
-				//println!( "calculating {} {}", total_flow, path.to_string() );
+		let mut me: Vec< i32 > = Vec::new();
+		let mut elephant: Vec< i32 > = Vec::new();
 
-				max_flow = cmp::max( total_flow, max_flow );
-				calcs += 1;
-			},
-			Some( children ) =>
+		for bit in 0..good_valves.len()
+		{
+			if ( ( 1 << bit ) & mask ) != 0
 			{
-				for child in children
-				{
-					if !visited.contains( &child.so_far )
-					{
-						visited.insert( child.so_far.clone() );
-						todo.push_back( child );
-					}
-				}
-			},
+				me.push( good_valves[ bit ] );
+			}
+			else
+			{
+				elephant.push( good_valves[ bit ] );
+			}
 		}
 
-		n += 1;
-		if ( n % 100000 ) == 0
+		let my_flow = best_flow_for_valves( &me, &valves );
+		let elephant_flow = best_flow_for_valves( &elephant, &valves );
+
+		let total_flow = my_flow + elephant_flow;
+		max_flow = cmp::max( total_flow, max_flow );
+
+
+		if ( mask % 100 ) == 0
 		{
-			println!( "TODO: {:?}  max_flow: {}    calcs: {}", todo.len(), max_flow, calcs );
+			println!( " {:5} {}", mask, max_flow );
 		}
 	}
-
 
 	println!( "Max flow: {}", max_flow );
 }
