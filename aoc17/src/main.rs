@@ -4,7 +4,6 @@ use std::cmp;
 
 
 const CHAMBER_WIDTH: usize = 7;
-const GRID_HEIGHT: usize = 2022 * 4 + 15;
 const DEBUG_STUFF: bool = false;
 
 #[derive(Eq,PartialEq,Clone,Copy,Debug)]
@@ -157,18 +156,20 @@ impl Rock
 #[derive(Eq,PartialEq,Clone,Debug)]
 struct Grid
 {
+	height: usize,
 	max_height: usize,
-	cells: Vec<bool>,
+	cells: Vec<u8>,
 }
 
 impl Grid
 {
-	fn new() -> Grid
+	fn new( height: usize ) -> Grid
 	{
-		let mut cells: Vec<bool> = Vec::new();
-		cells.resize( CHAMBER_WIDTH * GRID_HEIGHT, false );
+		let mut cells: Vec<u8> = Vec::new();
+		cells.resize( height, 0 );
 		return Grid
 		{
+			height: height,
 			max_height: 0,
 			cells: cells,
 		};
@@ -176,14 +177,24 @@ impl Grid
 
 	fn is_set( self: &Self, x: usize, y: usize ) -> bool
 	{
-		return self.cells[ x + y * CHAMBER_WIDTH ];
+		assert!( y < self.height );
+		let bit: u8 = 1 << x;
+		return 0 != ( self.cells[ y ] & bit );
 	}
 
 	fn set( self: &mut Self, x: usize, y: usize )
 	{
+		assert!( y < self.height );
 		assert!( !self.is_set( x, y ) );
-		self.cells[ x + y * CHAMBER_WIDTH ] = true;
+		let bit: u8 = 1 << x;
+		let old = self.cells[ y ];
+		self.cells[ y ] = old | bit;
 		self.max_height = cmp::max( self.max_height, y + 1 );
+	}
+
+	fn row ( self: &Self, y: usize ) -> u8
+	{
+		return self.cells[y];
 	}
 
 	fn dump( self: &Self )
@@ -234,11 +245,25 @@ fn main()
 
 	let rock_pattern = vec![ RockType::Horiz, RockType::Plus, RockType::Seven, RockType::Vert, RockType::Box ];
 
+	let rock_period = pattern.len() * rock_pattern.len();
+	let loop_attempts = 20;
+	let rock_count = rock_period * loop_attempts;
+	let range_to_check = 100;
+
+	println!( "Running rock count {} ", rock_count );
+	let mut height_after_rocks: Vec<usize> = Vec::new();
+	height_after_rocks.reserve( rock_count + 1);
+	height_after_rocks.push( 0 ); // rock IDs start at 1, so this shouldn't get used
+	let mut height_deltas: Vec<usize> = Vec::new();
+	height_deltas.reserve( rock_count + 1);
+	height_deltas.push( 0 );
+
 	let mut rocks: usize = 0;
 	let mut rounds: usize = 0;
-	let mut grid: Grid = Grid::new();
-
-	while rocks < 2022
+	let mut grid: Grid = Grid::new( rock_count * 4 + 8 );
+	let mut rock_loop_end: usize = 0;
+	let mut rock_loop_period: usize = 0;
+	while rocks < rock_count && rock_loop_end == 0
 	{
 		let mut rock = Rock::new( rock_pattern[ rocks % rock_pattern.len() ], grid.max_height + 3 );
 		if DEBUG_STUFF { println!( "NEW ROCK!" ); }
@@ -258,10 +283,88 @@ fn main()
 			}
 		}
 
+		height_after_rocks.push( grid.max_height );
+		height_deltas.push( height_after_rocks[ rocks ] - height_after_rocks[ rocks - 1 ] );
+		if rocks > rock_period * 2 && false
+		{
+
+			for i in 1..5 
+			{
+				
+				let y_start = grid.max_height - 1;
+				let y_end = y_start - range_to_check;
+
+				//println!( "y_start {}   y_end {}", y_start, y_end );
+				let y_compare_start = height_after_rocks[ rocks - i * rock_period ];
+				let y_offset = y_start - y_compare_start;
+
+				let mut matches = true;
+				for y in y_end..y_start
+				{
+					//println!( "now {}  w/ offset  {}", y, y_offset );
+					//println!( "nowh {}  w/ offset h  {}", grid.row( y ), grid.row( y_offset ) );
+					if grid.row( y ) != grid.row( y - y_offset )
+					{
+						matches = false;
+						break;
+					}
+				}
+
+				if matches
+				{
+					println!( "Found a match at {} (period {} rocks)", grid.max_height, i * rock_period );
+					rock_loop_end = rocks;
+					rock_loop_period = i * rock_period;
+					break;
+				}
+			}
+		}
+		
 		//println!( "{}", grid.max_height );
 	}
 
-	//println!( "pattern len: {}", pattern.len() );
+	for start in 32..height_deltas.len()
+	{
+		let mut matched = false;
+		for y in 0..30
+		{
+			if height_deltas[ start ] != height_deltas[ start - y ]
+			{
+				matched = false;
+				break;
+			}
+		}
+
+		if matched
+		{
+			println!( "Found one at {}", start );
+		}
+	}
+			
+
+	if rock_loop_end != 0
+	{
+		let left_to_do = 1000000000000 - rock_loop_end;
+		let loops = left_to_do / rock_loop_period;
+		let remainder = left_to_do % rock_loop_period;
+
+		let rock_loop_start = rock_loop_end - rock_loop_period;
+		let height_per_loop = height_after_rocks[ rock_loop_end ] - height_after_rocks[ rock_loop_start ];
+
+		let remainder_height = height_after_rocks[ rock_loop_start + remainder ] - height_after_rocks[ rock_loop_start ];
+		let mega_height = height_after_rocks[ rock_loop_end ] + loops * height_per_loop + remainder_height;
+
+		println!( "left_to_do {}   loops {}   remainder {}   rock_loop_start {}   height_per_loop {}   remainder_height {}",
+			left_to_do,
+			loops,
+			remainder,
+			rock_loop_start,
+			height_per_loop,
+			remainder_height,
+		);
+		println!( "height after 1000000000000: {}", mega_height );
+	}
+
 	println!( "{}", grid.max_height );
-	grid.dump();
+	//grid.dump();
 }
