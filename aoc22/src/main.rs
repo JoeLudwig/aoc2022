@@ -17,6 +17,18 @@ enum Dir
 	Up = 3,
 }
 
+fn rotate_dir( dir: Dir, rots: i32 ) -> Dir
+{
+	return match ( dir as i32 + rots + 4 ) % 4
+	{
+		0 => Dir::Right,
+		1 => Dir::Down,
+		2 => Dir::Left,
+		3 => Dir::Up,
+		_ => panic!( "Invalid number of rots or something {:?}, {}", dir, rots ),
+	};
+}
+
 #[derive(Clone,Copy,Debug)]
 struct GridCell
 {
@@ -148,6 +160,15 @@ impl Grid
 			for x in 0..self.width
 			{
 				line.push( self.data[ x + y * self.width ].disp() );
+				/*line.push( match self.face
+				{
+					Face::Top => 'T',
+					Face::Front => 'F',
+					Face::Bottom => 'b',
+					Face::Back => 'B',
+					Face::Right => 'R',
+					Face::Left => 'L',
+				} ); */
 			}
 			out.push( line );
 		}
@@ -176,7 +197,9 @@ impl Grid
 	fn visit( self: &mut Self, agent: Agent ) 
 	{
 		let i = agent.x as usize + agent.y as usize * self.width;
-		self.data[ i ].last_travel = Some( agent.dir );
+
+		// pre-rotate the arrow so it'll display correctly
+		self.data[ i ].last_travel = Some( rotate_dir( agent.dir, -self.rots ) );
 	}
 
 	fn transpose( self: &mut Self  )
@@ -262,7 +285,7 @@ impl Grid
 
 		// this is a transpose, followed by a horizontal flip
 		self.transpose();
-		self.flip_vertical();
+		self.flip_horizontal();
 		self.rots += 1;
 	}
 
@@ -288,7 +311,8 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 		|| x > last
 		|| y > last;
 
-	println!( "( {}, {} ) => ( {}, {} )  {}",
+	println!( "{:6?} {:?} ( {}, {} ) => ( {}, {} )  {}",
+		curr.face, curr.dir,
 		curr.x, curr.y, x, y, overflow );
 	let mut next = curr.clone();
 	if !overflow
@@ -326,6 +350,7 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 					// rotate left
 					next.x = flip( y );
 					next.y = 0;
+					next.dir = Dir::Down;
 				},
 					
 				Dir::Left =>
@@ -335,6 +360,7 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 					// rotate right
 					next.x = curr.y;
 					next.y = 0;
+					next.dir = Dir::Down;
 				},
 
 				Dir::Up =>
@@ -400,6 +426,7 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 					next.face = Face::Back;
 
 					// flip horiz
+					next.dir = Dir::Up;
 					next.x = flip( x );
 					next.y = last; 
 				},
@@ -409,6 +436,7 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 					next.face = Face::Right;
 
 					// rotate right
+					next.dir = Dir::Up;
 					next.x = y;
 					next.y = last; 
 				},
@@ -418,6 +446,7 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 					next.face = Face::Left;
 
 					// rotate left
+					next.dir = Dir::Up;
 					next.x = flip( y );
 					next.y = last; 
 				},
@@ -427,6 +456,7 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 					next.face = Face::Front;
 
 					// same orientation
+					next.dir = Dir::Up;
 					next.x = x;
 					next.y = last; 
 				}
@@ -443,13 +473,14 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 					next.face = Face::Bottom;
 
 					// flip horiz
+					next.dir = Dir::Up;
 					next.x = flip( x );
 					next.y = last; 
 				},
 
 				Dir::Right =>
 				{
-					next.face = Face::Right;
+					next.face = Face::Left;
 
 					// same orientation
 					next.x = 0;
@@ -458,7 +489,7 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 					
 				Dir::Left =>
 				{
-					next.face = Face::Left;
+					next.face = Face::Right;
 
 					// same orientation
 					next.x = last;
@@ -470,6 +501,7 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 					next.face = Face::Front;
 
 					// flip horiz
+					next.dir = Dir::Down;
 					next.x = flip( x );
 					next.y = 0; 
 				}
@@ -485,6 +517,7 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 					next.face = Face::Bottom;
 
 					// flip horiz
+					next.dir = Dir::Left;
 					next.x = last;
 					next.y = x; 
 				},
@@ -511,7 +544,8 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 				{
 					next.face = Face::Top;
 
-					// flip horiz
+					// rotate left
+					next.dir = Dir::Left;
 					next.x = last;
 					next.y = flip( x ); 
 				}
@@ -527,6 +561,7 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 					next.face = Face::Bottom;
 
 					// rotate right
+					next.dir = Dir::Right;
 					next.x = 0;
 					next.y = flip( x ); 
 				},
@@ -554,6 +589,7 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 					next.face = Face::Top;
 
 					// flip horiz
+					next.dir = Dir::Right;
 					next.x = 0;
 					next.y = x;
 				}
@@ -579,6 +615,7 @@ fn walk( cube: &mut Vec<Grid>, start: Agent, dist: usize ) -> Agent
 
 		if cell.blocked
 		{
+			println!( "   BLOCKED" );
 			// stop and don't move to next
 			break;
 		}
@@ -846,10 +883,10 @@ fn main()
 	else if grid_lines[ top_x_face + 1 + ( top_y_face + 2 ) * 6 ].len() > 0
 	{
 		// right off of bottom
-		// need to rate this one to the right
+		// need to rotate this one to the right
 		let mut right = Grid::new( &grid_lines[ top_x_face + 1 + ( top_y_face + 2 ) * 6 ], Face::Right,
 			top_x_face + 1, top_y_face + 2 );
-		right.rotate_right();
+		right.rotate_left();
 		cube[ Face::Right as usize ] = Some( right );
 	}
 	else
@@ -881,7 +918,7 @@ fn main()
 		// need to rate this one to the right
 		let mut left = Grid::new( &grid_lines[ top_x_face - 1 + ( top_y_face + 2 ) * 6 ], Face::Left,
 			top_x_face - 1, top_y_face + 2 );
-		left.rotate_right();
+		left.rotate_left();
 		cube[ Face::Left as usize ] = Some( left );
 	}
 	else
@@ -960,24 +997,12 @@ fn main()
 			Command::Move( dist ) => agent = walk( &mut cube, agent, dist ),
 			Command::Left =>
 			{
-				agent.dir = match agent.dir
-				{
-					Dir::Up => Dir::Left,
-					Dir::Left => Dir::Down,
-					Dir::Down => Dir::Right,
-					Dir::Right => Dir::Up,
-				};
+				agent.dir = rotate_dir( agent.dir, -1 );
 				cube[ agent.face ].visit( agent );
 			},
 			Command::Right =>
 			{
-				agent.dir = match agent.dir
-				{
-					Dir::Down => Dir::Left,
-					Dir::Right => Dir::Down,
-					Dir::Up => Dir::Right,
-					Dir::Left => Dir::Up,
-				};
+				agent.dir = rotate_dir( agent.dir, 1 );
 				cube[ agent.face ].visit( agent );
 			},
 		}
@@ -985,7 +1010,24 @@ fn main()
 
 	dump_cube( &cube );
 
-	// TODO: Scalethis by slot
-//	let final_password = ( agent.y + 1 ) * 1000 + ( agent.x + 1 ) * 4 + agent as isize;
-//	println!( "final password: {}", final_password );
+
+	let last: isize = face_width as isize;
+	let face = &cube[ agent.face ];
+	let ( rot_x, rot_y ) = match face.rots
+	{
+		0 => ( agent.x, agent.y ),
+		1 => ( agent.y, last - agent.x ),
+		-1 => ( last - agent.y, agent.x ),
+		_ => panic!( "Some BS"),
+	};
+	let rot_dir = rotate_dir( agent.dir, face.rots );
+
+	println!( "{} * 1000 + {} * 4 + {}", agent.y + 1, agent.x + 1, agent.dir as isize );
+	println!( "{} * 1000 + {} * 4 + {}", rot_y + 1, rot_x + 1, rot_dir as isize );
+
+	let final_x = rot_x + face_width as isize * face.x_slot as isize;
+	let final_y = rot_y + face_width as isize * face.y_slot as isize;
+	println!( "{} * 1000 + {} * 4 + {}", final_y + 1, final_x + 1, rot_dir as isize );
+	let final_password = ( final_y + 1 ) * 1000 + ( final_x + 1 ) * 4 + rot_dir as isize;
+	println!( "final password: {}", final_password );
 }
