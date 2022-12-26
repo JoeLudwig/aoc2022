@@ -161,7 +161,8 @@ fn main()
 	dump_elves( &elves );
 	println!("");
 
-	for round in 0..10 // rounds
+	let mut round: usize = 0;
+	loop 
 	{
 		let occupied = elf_occupied( &elves );
 		let mut proposals = HashMap::<Pt, u32>::new();
@@ -185,6 +186,7 @@ fn main()
 		}
 
 		// execute all the proposals
+		let mut elves_moved = 0;
 		for elf in &mut elves
 		{
 			match elf.proposed_pos
@@ -198,6 +200,7 @@ fn main()
 						{
 							// exactly one elf proposed moving here
 							elf.pos = dest;
+							elves_moved += 1;
 						},
 						_ => {}, // otherwise do nothing
 					}
@@ -205,8 +208,16 @@ fn main()
 			}
 		}
 
-		dump_elves( &elves );
-		println!( "" );
+		if elves_moved == 0
+		{
+			println!( "No elves moved in round {}", round + 1 );
+			break;
+		}
+
+		//dump_elves( &elves );
+		//println!( "" );
+
+		round += 1;
 	}
 
 	let bounds = elf_bounds( &elves );
