@@ -370,6 +370,7 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 					// flip horiz
 					next.x = flip( x );
 					next.y = 0;
+					next.dir = Dir::Down;
 				}
 					
 			}
@@ -498,7 +499,7 @@ fn next_step( face_width: usize, curr: Agent ) -> Agent
 
 				Dir::Up =>
 				{
-					next.face = Face::Front;
+					next.face = Face::Top;
 
 					// flip horiz
 					next.dir = Dir::Down;
@@ -869,7 +870,7 @@ fn main()
 		// need to rotate the right side 
 		let mut right = Grid::new( &grid_lines[ top_x_face + 1 + top_y_face * 6 ], Face::Right,
 			top_x_face + 1, top_y_face );
-		right.rotate_left();
+		right.rotate_right();
 		cube[ Face::Right as usize ] = Some( right );
 	}
 	else if grid_lines[ top_x_face + 1 + ( top_y_face + 1 ) * 6 ].len() > 0
@@ -915,10 +916,10 @@ fn main()
 	else if top_x_face > 0 && grid_lines[ top_x_face - 1 + ( top_y_face + 2 ) * 6 ].len() > 0
 	{
 		// left off of bottom
-		// need to rate this one to the right
+		// need to rotate this one to the right
 		let mut left = Grid::new( &grid_lines[ top_x_face - 1 + ( top_y_face + 2 ) * 6 ], Face::Left,
 			top_x_face - 1, top_y_face + 2 );
-		left.rotate_left();
+		left.rotate_right();
 		cube[ Face::Left as usize ] = Some( left );
 	}
 	else
@@ -941,7 +942,7 @@ fn main()
 		// down off the left side
 		let mut back = Grid::new( &grid_lines[ top_x_face - 1 + ( top_y_face + 3 ) * 6 ], Face::Back,
 			top_x_face - 1, top_y_face + 3 );
-		back.rotate_left();
+		back.rotate_right();
 		cube[ Face::Back as usize ] = Some( back );
 	}
 	else
